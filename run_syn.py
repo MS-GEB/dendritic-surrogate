@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from single import Single_hh
+from single_syn import Single_syn as Single
 from neuron import h
 
 
@@ -12,26 +12,21 @@ h.load_file('stdgui.hoc')
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--setup', type=str, default='acc')         # 'acc' for numerical accuracy, or 'cf' for curve fitting
 parser.add_argument('--mode', type=str, default='pas')          # output voltage type, 'pas' for subthreshold, 
                                                                 # 'single' for single burst, 'multi' for multiple bursts
 parser.add_argument('--device', type=str, default='cuda:0')     # PyTorch computing device
 parser.add_argument('--adam', action='store_true')              # whether to use Adam optimizer
 args, _ = parser.parse_known_args()
 
-SETUP, MODE = args.setup, args.mode
-assert SETUP in ['acc', 'cf'], "'acc' for numerical accuracy, or 'cf' for curve fitting"
+MODE = args.mode
 assert MODE in ['pas', 'single', 'multi'], "'pas' for subthreshold, 'single' for single burst, 'multi' for multiple bursts"
-OUTPUT_PATH = os.path.join('output', SETUP, MODE)
+OUTPUT_PATH = os.path.join('output', 'syn', MODE)
 os.makedirs(OUTPUT_PATH, exist_ok=True)
-DEVICE = args.device                    # PyTorch computing device
-if SETUP == 'acc':
-    K_max_t = 200                       # transfer impedance maximum time window for numerical acc (ms)
-else:
-    K_max_t = 75                        # transfer impedance maximum time window for curve fitting (ms)
+DEVICE = args.device                            # PyTorch computing device
+K_max_t = 75                                    # transfer impedance maximum time window for curve fitting (ms)
 K_filename = os.path.join(OUTPUT_PATH, "K.npy")
-w_e_min, w_e_max = 0., None             # restrict polarity
-w_i_min, w_i_max = None, -0.            # restrict polarity
+w_e_min, w_e_max = 0., None                     # restrict polarity
+w_i_min, w_i_max = None, -0.                    # restrict polarity
 N_hh, N_e, N_i = 2, 400, 100
 
 ### Simulation Parameters ###
@@ -44,13 +39,7 @@ lr_off = 450                            # learning end (ms)
 rand_freq = 10                          # random input firing rate (Hz)
 bg_freq = 2                             # background noise firing rate (Hz)
 v_rest = -75                            # resting potential (mV)
-if SETUP == 'acc':
-    if MODE == 'pas':
-        dt = 0.1           		        # time step for numerical accuracy in 'pas' mode (ms)
-    else:
-        dt = 0.025                      # time step for numerical accuracy in 'single' and 'multi' modes (ms)
-else:
-    dt = 0.1                            # time step for curve fitting (ms)
+dt = 0.1                                # time step for curve fitting (ms)
 epochs = 100       					    # maximum training epochs
 ADAM = args.adam                        # whether to use Adam optimizer
 if ADAM:
@@ -60,7 +49,7 @@ else:
 spk_threshold = -40                     # Spike detection threshold (mV)
 
 
-def gen_target(cell: Single_hh, inputs):
+def gen_target(cell: Single, inputs):
     cell.set_stim(inputs)
     t_rec = h.Vector().record(h._ref_t)
 
@@ -79,7 +68,7 @@ def gen_target(cell: Single_hh, inputs):
     return np.array(t_rec), np.array(cell.v_out), np.array(cell.v_pred)
 
 
-def train(cell: Single_hh, inputs, v_target):    
+def train(cell: Single, inputs, v_target):    
     lr_start = int(lr_on / dt)
     lr_end = int(lr_off / dt)
     t_rec = h.Vector().record(h._ref_t)
@@ -177,7 +166,7 @@ if __name__ == '__main__':
         'w_i_min': w_i_min, 'w_i_max': w_i_max,
         'device': DEVICE,
     }
-    cell = Single_hh(config)
+    cell = Single(config)
 
     inputs = []
     for _ in range(N_e + N_i):
@@ -194,66 +183,30 @@ if __name__ == '__main__':
 
     ### Set target weights ###
     match MODE:
-        case 'pas':                                             # dt = 0.1 ms
+        case 'pas':
             w_hh = np.array([1.,] * N_hh)
             w_e = rng.uniform(0.1*1e-3, 1.4*1e-3, (N_e,))
             w_i = rng.uniform(-1.4*1e-3, -0.1*1e-3, (N_i,))
         case 'single':
             w_hh = np.array([1.,] * N_hh)
-            if SETUP == 'acc':                                  # dt = 0.025 ms
-                w_e = rng.uniform(0.1*1e-3, 1.4*1e-3, (N_e,))
-                w_i = rng.uniform(-1.4*1e-3, -0.1*1e-3, (N_i,))
-            else:                                               # dt = 0.1 ms
-                w_e = rng.uniform(0.1*1e-3, 1.7*1e-3, (N_e,))
-                w_i = rng.uniform(-1.7*1e-3, -0.1*1e-3, (N_i,))
+            w_e = rng.uniform(0.1*1e-3, 1.7*1e-3, (N_e,))
+            w_i = rng.uniform(-1.7*1e-3, -0.1*1e-3, (N_i,))
         case 'multi':
             w_hh = np.array([1.,] * N_hh)
-            if SETUP == 'acc':                                  # dt = 0.025 ms
-                w_e = rng.uniform(0.1*1e-3, 1.7*1e-3, (N_e,))
-                w_i = rng.uniform(-1.7*1e-3, -0.1*1e-3, (N_i,))
-            else:                                               # dt = 0.1 ms
-                w_e = rng.uniform(0.1*1e-3, 2.*1e-3, (N_e,))
-                w_i = rng.uniform(-2.*1e-3, -0.1*1e-3, (N_i,))
+            w_e = rng.uniform(0.1*1e-3, 2.*1e-3, (N_e,))
+            w_i = rng.uniform(-2.*1e-3, -0.1*1e-3, (N_i,))
     cell.set_weights(np.concatenate((w_hh, w_e, w_i)))
 
-    match SETUP:
-        case 'acc':
-            t_rec, v_target, v_pred = gen_target(cell, inputs)
+    t_rec, v_target, _ = gen_target(cell, inputs)
 
-            ### Plot ###
-            fig, ax = plt.subplots()
-            ax.plot(t_rec, v_pred, label='Surrogate')
-            ax.plot(t_rec, v_target, label='Detailed', linestyle='dashed')
-            ax.set_xlabel('Time (ms)')
-            ax.set_ylabel('Voltage (mV)')
-            ax.legend(loc='upper left')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            fig.tight_layout()
-            fig.savefig(os.path.join(OUTPUT_PATH, "Compare.png"))
-            plt.close(fig)
+    ### Reinitialize weights ###
+    w_hh = np.array([1.,] * N_hh)
+    w_e = rng.uniform(0.*1e-3, 0.3*1e-3, (N_e,))
+    w_i = rng.uniform(-0.3*1e-3, -0.*1e-3, (N_i,))
+    cell.set_weights(np.concatenate((w_hh, w_e, w_i)))
 
-            fig, ax = plt.subplots()
-            ax.plot(t_rec, v_target - v_pred)
-            ax.set_xlabel('Time (ms)')
-            ax.set_ylabel('Difference (mV)')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            fig.tight_layout()
-            fig.savefig(os.path.join(OUTPUT_PATH, "Diff.png"))
-            plt.close(fig)
-
-        case 'cf':
-            t_rec, v_target, _ = gen_target(cell, inputs)
-
-            ### Reinitialize weights ###
-            w_hh = np.array([1.,] * N_hh)
-            w_e = rng.uniform(0.*1e-3, 0.3*1e-3, (N_e,))
-            w_i = rng.uniform(-0.3*1e-3, -0.*1e-3, (N_i,))
-            cell.set_weights(np.concatenate((w_hh, w_e, w_i)))
-
-            ### Train ###
-            loss_train = train(cell, inputs, v_target)
+    ### Train ###
+    loss_train = train(cell, inputs, v_target)
 
     print('Done')
     h.quit()

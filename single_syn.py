@@ -3,19 +3,19 @@ import torch
 from neuron import h
 from tqdm import tqdm
 
-class Single_hh:
+class Single_syn:
     def __init__(self, config):
 
         self.rng = np.random.default_rng(seed=config['seed'])
 
-        self.N_out = 1                          # soma[0](0.5)
-        self.N_hh = config['N_hh']              # soma[0](0.5)
+        self.N_out = 1                                      # soma[0](0.5)
+        self.N_hh = config['N_hh']                          # soma[0](0.5)
         self.N_e, self.N_i = config['N_e'], config['N_i']
         self.N_syn = self.N_hh + self.N_e + self.N_i
         self.N = self.N_out + self.N_syn
 
-        self.v_rest = config['v_rest']          # resting potential
-        self.K_max_t = config['K_max_t']        # transfer impedance maximum time window
+        self.v_rest = config['v_rest']                      # resting potential
+        self.K_max_t = config['K_max_t']                    # transfer impedance maximum time window
         self.K_filename = config['K_filename']
         self.w_e_min, self.w_e_max = config['w_e_min'], config['w_e_max']
         self.w_i_min, self.w_i_max = config['w_i_min'], config['w_i_max']

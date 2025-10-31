@@ -1,9 +1,9 @@
 # Dendritic Surrogate
+Dendritic voltage surrogate for training synaptic weights & ion channel conductances of biophysically detailed multi-compartment models.
 
-Code associated with the paper "Gan He, Mengdi Zhao, Tiejun Huang and Kai Du, (2025). Training biophysically detailed neurons and networks with a dendritic voltage surrogate" (soon on biorxiv when ready) for reproducing Figure 2.
+Code associated with the paper "Gan He, Mengdi Zhao, Tiejun Huang and Kai Du, (2025). Training biophysically detailed neurons and networks with a dendritic voltage surrogate" (soon on biorxiv when ready) for reproducing Figure 2 & 3.
 
-Requirements
------------------
+## Requirements
 Python==3.12 (tested version)\
 numpy\
 matplotlib\
@@ -11,41 +11,46 @@ tqdm\
 torch==2.8.0 (tested version, also best to have compatible GPU)\
 NEURON==8.2.7 (tested version)
 
-Usage
----------------
+## Usage
 First compile mod files with 
 ```
 nrnivmodl ./mod
 ```
 Note to add '--device' as your PyTorch computing device in the following commands (default is 'cuda:0')
 
-### Numerical accuracy validation for subthreshold (Figure 2b)
+### 1. Validate numerical accuracy
+#### Subthreshold (Figure 2b)
 ```
-python3 run.py --setup acc --mode pas
+python3 run_num.py --mode pas
 ```
-### Numerical accuracy validation for bursting (Figure 2c)
+#### Bursting (Figure 2c)
 ```
-python3 run.py --setup acc --mode multi
+python3 run_num.py --mode multi
 ```
-### Somatic curve fitting for subthreshold (Figure 2d)
+
+### 2. Train synaptic weights
+#### Subthreshold (Figure 2d)
 ```
-python3 run.py --setup cf --mode pas --adam
+python3 run_syn.py --mode pas --adam
 ```
-### Somatic curve fitting for single burst (Figure 2e)
+#### Single burst (Figure 2e)
 ```
-python3 run.py --setup cf --mode single --adam
+python3 run_syn.py --mode single --adam
 ```
-### Somatic curve fitting for multiple bursts (Figure 2f)
+#### Multiple bursts (Figure 2f)
 ```
-python3 run.py --setup cf --mode multi
+python3 run_syn.py --mode multi
+```
+
+### 3. Train ion channel conductances
+```
+python3 run_ion.py
 ```
 
 Note that training is memory-intensive with the default 'K_max_t' in run.py. Try reducing this value when out of memory.
 
-License
--------
+## License
 This project is covered under the Apache License 2.0.
 
-Contact
--------
+## Contact
 For any questions please contact Gan He via email (hegan@mail.tsinghua.edu.cn).
