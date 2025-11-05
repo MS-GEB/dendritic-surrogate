@@ -1,3 +1,15 @@
+# Compiled MOD files
+mod/*.c
+mod/*.cpp
+mod/*.o
+mod/*.tmp
+mod/*.dll
+*.dll
+x86_64/
+
+# Experiment outputs
+output/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

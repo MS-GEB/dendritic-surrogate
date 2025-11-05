@@ -1,8 +1,9 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from single_syn import Single_syn as Single
+import torch
 from neuron import h
+from single_s import Single_s as Single
 
 
 random_seed = 1
@@ -14,7 +15,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='pas')          # output voltage type, 'pas' for subthreshold, 
                                                                 # 'single' for single burst, 'multi' for multiple bursts
-parser.add_argument('--device', type=str, default='cuda:0')     # PyTorch computing device
+parser.add_argument('--device', type=str, default=None)         # PyTorch device
 parser.add_argument('--adam', action='store_true')              # whether to use Adam optimizer
 args, _ = parser.parse_known_args()
 
@@ -22,12 +23,17 @@ MODE = args.mode
 assert MODE in ['pas', 'single', 'multi'], "'pas' for subthreshold, 'single' for single burst, 'multi' for multiple bursts"
 OUTPUT_PATH = os.path.join('output', 'syn', MODE)
 os.makedirs(OUTPUT_PATH, exist_ok=True)
-DEVICE = args.device                            # PyTorch computing device
+if args.device:                                 # Specified PyTorch device
+    DEVICE = args.device
+elif torch.cuda.is_available():                 # Default PyTorch device
+    DEVICE = 'cuda:0'
+else:
+    DEVICE = 'cpu'
 K_max_t = 75                                    # transfer impedance maximum time window for curve fitting (ms)
-K_filename = os.path.join(OUTPUT_PATH, "K.npy")
+K_filename = os.path.join(OUTPUT_PATH, 'K.npy')
 w_e_min, w_e_max = 0., None                     # restrict polarity
 w_i_min, w_i_max = None, -0.                    # restrict polarity
-N_hh, N_e, N_i = 2, 400, 100
+N_s, N_e, N_i = 2, 400, 100
 
 ### Simulation Parameters ###
 bin_on = 50                             # stimulus start earliest (ms)
@@ -119,7 +125,7 @@ def train(cell: Single, inputs, v_target):
             ax.spines['right'].set_visible(False)
             ax.set_title(f'epoch: {iepoch:03d}')
             fig.tight_layout()
-            fig.savefig(os.path.join(OUTPUT_PATH, "Optimal.png"))
+            fig.savefig(os.path.join(OUTPUT_PATH, 'Optimal.png'))
             plt.close(fig)
 
         ### Compute dw ###
@@ -147,7 +153,7 @@ def train(cell: Single, inputs, v_target):
         ax.yaxis.set_ticks_position('left')
         ax.xaxis.set_ticks_position('bottom')
         fig.tight_layout()
-        fig.savefig(os.path.join(OUTPUT_PATH, "loss.png"))
+        fig.savefig(os.path.join(OUTPUT_PATH, 'loss.png'))
         plt.close(fig)
     
     return loss_train
@@ -159,7 +165,7 @@ if __name__ == '__main__':
 
     config = {
         'seed': random_seed,
-        'N_hh': N_hh, 'N_e': N_e, 'N_i': N_i,
+        'N_s': N_s, 'N_e': N_e, 'N_i': N_i,
         'v_rest': v_rest,
         'K_max_t': K_max_t, 'K_filename': K_filename,
         'w_e_min': w_e_min, 'w_e_max': w_e_max,
@@ -184,26 +190,26 @@ if __name__ == '__main__':
     ### Set target weights ###
     match MODE:
         case 'pas':
-            w_hh = np.array([1.,] * N_hh)
+            w_s = np.array([1.,] * N_s)
             w_e = rng.uniform(0.1*1e-3, 1.4*1e-3, (N_e,))
             w_i = rng.uniform(-1.4*1e-3, -0.1*1e-3, (N_i,))
         case 'single':
-            w_hh = np.array([1.,] * N_hh)
+            w_s = np.array([1.,] * N_s)
             w_e = rng.uniform(0.1*1e-3, 1.7*1e-3, (N_e,))
             w_i = rng.uniform(-1.7*1e-3, -0.1*1e-3, (N_i,))
         case 'multi':
-            w_hh = np.array([1.,] * N_hh)
+            w_s = np.array([1.,] * N_s)
             w_e = rng.uniform(0.1*1e-3, 2.*1e-3, (N_e,))
             w_i = rng.uniform(-2.*1e-3, -0.1*1e-3, (N_i,))
-    cell.set_weights(np.concatenate((w_hh, w_e, w_i)))
+    cell.set_weights(np.concatenate((w_s, w_e, w_i)))
 
     t_rec, v_target, _ = gen_target(cell, inputs)
 
     ### Reinitialize weights ###
-    w_hh = np.array([1.,] * N_hh)
+    w_s = np.array([1.,] * N_s)
     w_e = rng.uniform(0.*1e-3, 0.3*1e-3, (N_e,))
     w_i = rng.uniform(-0.3*1e-3, -0.*1e-3, (N_i,))
-    cell.set_weights(np.concatenate((w_hh, w_e, w_i)))
+    cell.set_weights(np.concatenate((w_s, w_e, w_i)))
 
     ### Train ###
     loss_train = train(cell, inputs, v_target)

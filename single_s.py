@@ -1,17 +1,22 @@
+import os
 import numpy as np
 import torch
 from neuron import h
 from tqdm import tqdm
 
-class Single_syn:
+MODEL_NAME = 'PassiveHPC'
+MODEL_PATH = f'models/{MODEL_NAME}.hoc'
+MORPH_PATH = 'morphs/2013_03_06_cell11_1125_H41_06.asc'
+
+class Single_s:
     def __init__(self, config):
 
         self.rng = np.random.default_rng(seed=config['seed'])
 
         self.N_out = 1                                      # soma[0](0.5)
-        self.N_hh = config['N_hh']                          # soma[0](0.5)
+        self.N_s = config['N_s']                            # soma[0](0.5)
         self.N_e, self.N_i = config['N_e'], config['N_i']
-        self.N_syn = self.N_hh + self.N_e + self.N_i
+        self.N_syn = self.N_s + self.N_e + self.N_i
         self.N = self.N_out + self.N_syn
 
         self.v_rest = config['v_rest']                      # resting potential
@@ -43,10 +48,10 @@ class Single_syn:
         return cell
 
     def _create_cell(self):
-        h.load_file("import3d.hoc")
-        h.load_file("PassiveHPC.hoc")
+        h.load_file('import3d.hoc')
+        h.load_file(MODEL_PATH)
 
-        self.cell = self._setup_hpc("PassiveHPC", "2013_03_06_cell11_1125_H41_06.asc")
+        self.cell = self._setup_hpc(MODEL_NAME, MORPH_PATH)
         for sec in self.cell.all:
             sec.e_pas = self.v_rest
         self.v_out = h.Vector().record(self.cell.soma[0](0.5)._ref_v)
@@ -59,7 +64,7 @@ class Single_syn:
             assert tmp_K.shape == (self.N, self.N_syn, self.K_len), "Unexpected shape of K"
         except FileNotFoundError:
             print(f"{self.K_filename} not found, computing K")
-            tmp_cell = self._setup_hpc("PassiveHPC", "2013_03_06_cell11_1125_H41_06.asc")
+            tmp_cell = self._setup_hpc(MODEL_NAME, MORPH_PATH)
             for sec in tmp_cell.all:
                 sec.e_pas = self.v_rest
             tmp_K = np.zeros((self.N, self.N_syn, self.K_len), dtype=np.float32)
@@ -70,7 +75,7 @@ class Single_syn:
                 v = h.Vector()
                 if i < self.N_out:                                  # somatic output
                     v.record(tmp_cell.soma[dend_id](loc)._ref_v)
-                elif i < self.N_out + self.N_hh:                    # soma hh
+                elif i < self.N_out + self.N_s:                     # soma
                     v.record(tmp_cell.soma[dend_id](loc)._ref_v)
                 elif dend_id < self.total_dend:                     # dend
                     v.record(tmp_cell.dend[dend_id](loc)._ref_v)
@@ -82,7 +87,7 @@ class Single_syn:
             for j in tqdm(range(self.N_syn)):
                 dend_id = self.conn[self.N_out + j]
                 loc = self.conn_loc[self.N_out + j]
-                if j < self.N_hh:                                   # soma hh
+                if j < self.N_s:                                    # soma
                     clamp = h.IClamp(tmp_cell.soma[dend_id](loc))
                 elif dend_id < self.total_dend:                     # dend
                     clamp = h.IClamp(tmp_cell.dend[dend_id](loc))
@@ -111,29 +116,29 @@ class Single_syn:
         # connection matrix input-to-cell dendrites
         self.conn_out = np.array([0,], dtype=np.int32)
         self.conn_loc_out = np.array([0.5,])
-        self.conn_hh = np.array([0,] * self.N_hh, dtype=np.int32)
-        self.conn_loc_hh = np.array([0.5,] * self.N_hh)
+        self.conn_s = np.array([0,] * self.N_s, dtype=np.int32)
+        self.conn_loc_s = np.array([0.5,] * self.N_s)
         self.conn_e = self.rng.integers(0, self.total_dend + self.total_apic, (self.N_e,))
         self.conn_loc_e = self.rng.random((self.N_e,))
         self.conn_i = self.rng.integers(0, self.total_dend + self.total_apic, (self.N_i,))
         self.conn_loc_i = self.rng.random((self.N_i,))
-        self.conn = np.concatenate((self.conn_out, self.conn_hh, self.conn_e, self.conn_i))
-        self.conn_loc = np.concatenate((self.conn_loc_out, self.conn_loc_hh, self.conn_loc_e, self.conn_loc_i))
+        self.conn = np.concatenate((self.conn_out, self.conn_s, self.conn_e, self.conn_i))
+        self.conn_loc = np.concatenate((self.conn_loc_out, self.conn_loc_s, self.conn_loc_e, self.conn_loc_i))
 
         # transfer impedance matrix
         self._cal_K()
 
         # weight matrix input-to-cell dendrites
-        w_hh = np.ones((self.N_hh,))
+        w_s = np.ones((self.N_s,))
         w_e = self.rng.uniform(0.1*1e-3, 1.*1e-3, (self.N_e,))
         w_i = self.rng.uniform(-1.*1e-3, -0.1*1e-3, (self.N_i,))
-        self.w = np.concatenate((w_hh, w_e, w_i))
+        self.w = np.concatenate((w_s, w_e, w_i))
 
-        # soma hh
-        self.synlist_hh = []
-        for i in range(self.N_hh):
-            soma_id = self.conn_hh[i]                               # 0
-            loc = self.conn_loc_hh[i]                               # 0.5
+        # soma
+        self.synlist_s = []
+        for i in range(self.N_s):
+            soma_id = self.conn_s[i]                               # 0
+            loc = self.conn_loc_s[i]                               # 0.5
             if i == 0:  # hh
                 syn = h.HH2_modified(self.cell.soma[soma_id](loc))
                 syn.gnabar = 0.08
@@ -141,16 +146,16 @@ class Single_syn:
                 syn.vtraub = -60
                 syn.ena = 50
                 syn.ek = -80
-            else:   # im
+            else:       # im
                 syn = h.IM_modified(self.cell.soma[soma_id](loc))
                 syn.gkbar = 0.003
                 syn.taumax = 200
                 syn.ek = -80
             syn.dv = 1e-3
-            syn.w = w_hh[i]                                             # 1.
+            syn.w = w_s[i]                                              # 1.
             syn.seg_area = self.cell.soma[soma_id](loc).area() * 1e-8   # um2 to cm2
             syn.didv_clip = 1e3                                         # no clip
-            self.synlist_hh.append(syn)
+            self.synlist_s.append(syn)
 
         # input to cell
         # AMPA + NMDA
@@ -205,7 +210,7 @@ class Single_syn:
             nc.weight[0] = 1
             self.nclist_i.append(nc)
 
-        self.synlist = self.synlist_hh + self.synlist_e + self.synlist_i
+        self.synlist = self.synlist_s + self.synlist_e + self.synlist_i
 
     def set_stim(self, inputs):
         assert len(inputs) == self.N_e + self.N_i
@@ -239,7 +244,7 @@ class Single_syn:
 
     def update_dvdw(self, tstep):
         # called after each timestep advance
-        it = torch.tensor([syn.pure_i for syn in self.synlist_hh + self.synlist_e] +
+        it = torch.tensor([syn.pure_i for syn in self.synlist_s + self.synlist_e] +
                           [-syn.pure_i for syn in self.synlist_i],
                           dtype=torch.float32, device=torch.device(self.device))
         self.It = torch.hstack((self.It, it[:, torch.newaxis]))[:, -self.K_len:]                    # (N_syn, min(t, K_max_t))
@@ -261,22 +266,22 @@ class Single_syn:
         assert(lr_end - lr_start == len(dLtdv))
         dw = -np.sum(dLtdv * self.dVouttdw[:, lr_start:lr_end], axis=1) / (lr_end - lr_start)
         # mask
-        dw[:self.N_hh] = 0.
+        dw[:self.N_s] = 0.
         return dw
 
     def update_weights(self, dw):
         assert dw.shape == (self.N_syn,)
         dw = np.array(dw)
         # mask
-        dw[:self.N_hh] = 0
+        dw[:self.N_s] = 0
         self.w += dw
         # clip w
-        w_e = self.w[self.N_hh: self.N_hh + self.N_e]
-        w_i = self.w[self.N_hh + self.N_e:]
+        w_e = self.w[self.N_s: self.N_s + self.N_e]
+        w_i = self.w[self.N_s + self.N_e:]
         w_e = np.clip(w_e, a_min=self.w_e_min, a_max=self.w_e_max)
         w_i = np.clip(w_i, a_min=self.w_i_min, a_max=self.w_i_max)
-        self.w[self.N_hh: self.N_hh + self.N_e] = w_e
-        self.w[self.N_hh + self.N_e:] = w_i
+        self.w[self.N_s: self.N_s + self.N_e] = w_e
+        self.w[self.N_s + self.N_e:] = w_i
         self.set_weights()
     
     def set_weights(self, w=None):
@@ -286,15 +291,15 @@ class Single_syn:
         else:
             assert w.shape == (self.N_syn,)
         w = np.array(w)
-        w_hh = w[:self.N_hh]
-        w_e = w[self.N_hh: self.N_hh + self.N_e]
-        w_i = w[self.N_hh + self.N_e:]
+        w_s = w[:self.N_s]
+        w_e = w[self.N_s: self.N_s + self.N_e]
+        w_i = w[self.N_s + self.N_e:]
         w_e = np.clip(w_e, a_min=self.w_e_min, a_max=self.w_e_max)
         w_i = np.clip(w_i, a_min=self.w_i_min, a_max=self.w_i_max)
-        self.w[self.N_hh: self.N_hh + self.N_e] = w_e
-        self.w[self.N_hh + self.N_e:] = w_i
-        for i in range(self.N_hh):
-            self.synlist_hh[i].w = w_hh[i]
+        self.w[self.N_s: self.N_s + self.N_e] = w_e
+        self.w[self.N_s + self.N_e:] = w_i
+        for i in range(self.N_s):
+            self.synlist_s[i].w = w_s[i]
         for i in range(self.N_e):
             self.synlist_e[i].w = w_e[i]
         for i in range(self.N_i):

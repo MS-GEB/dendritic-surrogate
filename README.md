@@ -1,7 +1,7 @@
 # Dendritic Surrogate
-Dendritic voltage surrogate for training synaptic weights & ion channel conductances of biophysically detailed multi-compartment models.
+Dendritic voltage surrogate for training synaptic weights of biophysically detailed multi-compartment models.
 
-Code associated with the paper "Gan He, Mengdi Zhao, Tiejun Huang and Kai Du, (2025). Training biophysically detailed neurons and networks with a dendritic voltage surrogate" (soon on biorxiv when ready) for reproducing Figure 2 & 3.
+Code associated with the paper "Gan He, Mengdi Zhao, Tiejun Huang and Kai Du, (2025). Training biophysically detailed neurons and networks with a dendritic voltage surrogate" (soon on biorxiv when ready) for reproducing Figure 2.
 
 ## Requirements
 Python==3.12 (tested version)\
@@ -16,7 +16,6 @@ First compile mod files with
 ```
 nrnivmodl ./mod
 ```
-Note to add '--device' as your PyTorch computing device in the following commands (default is 'cuda:0')
 
 ### 1. Validate numerical accuracy
 #### Subthreshold (Figure 2b)
@@ -42,15 +41,10 @@ python3 run_syn.py --mode single --adam
 python3 run_syn.py --mode multi
 ```
 
-### 3. Train ion channel conductances
-```
-python3 run_ion.py
-```
-
 Note that training is memory-intensive with the default 'K_max_t' in run.py. Try reducing this value when out of memory.
 
 ## License
 This project is covered under the Apache License 2.0.
 
 ## Contact
-For any questions please contact Gan He via email (hegan@mail.tsinghua.edu.cn).
+For any questions please contact Gan He via email (hegan@pku.edu.cn).
