@@ -3,7 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from neuron import h
-from single_s import Single_s as Single
+from single import Single
+from tqdm import tqdm
 
 
 random_seed = 1
@@ -49,10 +50,10 @@ dt = 0.1                                # time step for curve fitting (ms)
 epochs = 100       					    # maximum training epochs
 ADAM = args.adam                        # whether to use Adam optimizer
 if ADAM:
-    alpha = 1e-5                        # initial learning rate for Adam optimizer
+    alpha = 1e-5                        # learning rate for Adam optimizer
 else:
-    alpha = 3e-8                        # initial learning rate for SGD optimizer
-spk_threshold = -40                     # Spike detection threshold (mV)
+    alpha = 3e-8                        # learning rate for SGD optimizer
+spk_thrsh = -40                         # Spike detection threshold (mV)
 
 
 def gen_target(cell: Single, inputs):
@@ -64,19 +65,19 @@ def gen_target(cell: Single, inputs):
     h.finitialize(v_rest)
     h.fcurrent()
     tstep = 0
-    while h.t < h.tstop:
-        print(f"t: {h.t:f}", end='\r')
-        h.fadvance()
-        tstep += 1
-        cell.update_pred(tstep)
-    print('')
+    with tqdm(desc="Running", total=tstop, unit='ms') as pbar:
+        pbar.bar_format = "{l_bar}{bar}| {n:.3f}/{total:.3f} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+        while h.t < h.tstop:
+            h.fadvance()
+            tstep += 1
+            cell.update_pred(tstep)
+            pbar.update(dt)
 
     return np.array(t_rec), np.array(cell.v_out), np.array(cell.v_pred)
 
 
-def train(cell: Single, inputs, v_target):    
-    lr_start = int(lr_on / dt)
-    lr_end = int(lr_off / dt)
+def train(cell: Single, inputs, v_tgt):    
+    lr_start, lr_end = int(lr_on / dt), int(lr_off / dt)
     t_rec = h.Vector().record(h._ref_t)
     loss_opt = 1e60
 
@@ -87,7 +88,6 @@ def train(cell: Single, inputs, v_target):
         beta_1_t, beta_2_t = 1., 1.
         epsilon = 1e-7
 
-    loss_train = []
     for iepoch in range(epochs):
         cell.set_stim(inputs)
 
@@ -96,20 +96,19 @@ def train(cell: Single, inputs, v_target):
         h.finitialize(v_rest)
         h.fcurrent()
         tstep = 0
-        while h.t < h.tstop:
-            print(f"epoch: {iepoch:d}, t: {h.t:f}", end='\r')
-            h.fadvance()
-            tstep += 1
-            cell.update_dvdw(tstep)
-        print('')
+        with tqdm(desc=f"Epoch {iepoch:d}", total=tstop, unit='ms') as pbar:
+            pbar.bar_format = "{l_bar}{bar}| {n:.3f}/{total:.3f} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+            while h.t < h.tstop:
+                h.fadvance()
+                tstep += 1
+                cell.update_dvdw(tstep)
+                pbar.update(dt)
 
         v_out = np.array(cell.v_out)
-        v_target_clip = np.clip(v_target, a_min=None, a_max=spk_threshold)[lr_start:lr_end]
-        v_output_clip = np.clip(v_out, a_min=None, a_max=spk_threshold)[lr_start:lr_end]
+        v_tgt_clip = np.clip(v_tgt, a_min=None, a_max=spk_thrsh)[lr_start:lr_end]
+        v_out_clip = np.clip(v_out, a_min=None, a_max=spk_thrsh)[lr_start:lr_end]
 
-        loss = np.mean(0.5*(np.abs(v_target_clip - v_output_clip))**2)
-        print(f"loss: {loss:.5g}")
-        loss_train.append(loss)
+        loss = 0.5 * np.sum((v_tgt_clip - v_out_clip)**2) / (lr_end - lr_start)
         
         if loss < loss_opt:
             loss_opt = loss
@@ -117,10 +116,10 @@ def train(cell: Single, inputs, v_target):
             ### Plot optimal results ###
             fig, ax = plt.subplots()
             ax.plot(t_rec, v_out, label='Learned')
-            ax.plot(t_rec, v_target, label='Target', linestyle='dashed')
+            ax.plot(t_rec, v_tgt, label='Target', linestyle='dashed')
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Voltage (mV)')
-            ax.legend(loc='upper left')
+            ax.legend(loc='upper left', frameon=False)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.set_title(f'epoch: {iepoch:03d}')
@@ -129,7 +128,7 @@ def train(cell: Single, inputs, v_target):
             plt.close(fig)
 
         ### Compute dw ###
-        dLtdv = -(v_target_clip - v_output_clip)
+        dLtdv = -(v_tgt_clip - v_out_clip)
         dw = cell.get_dw(dLtdv, lr_start, lr_end)
         if ADAM:
             adam_m = beta_1 * adam_m + (1. - beta_1) * dw
@@ -141,22 +140,6 @@ def train(cell: Single, inputs, v_target):
             dw = m_hat / (np.sqrt(v_hat) + epsilon)
         dw *= alpha
         cell.update_weights(dw)
-
-        ### Plot ###
-        fig, ax = plt.subplots()
-        ax.plot(range(1, len(loss_train) + 1), loss_train)
-        ax.set_xlabel('Epoch', fontsize=14)
-        ax.set_ylabel('Training error', fontsize=14)
-        ax.tick_params(labelsize=12)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.yaxis.set_ticks_position('left')
-        ax.xaxis.set_ticks_position('bottom')
-        fig.tight_layout()
-        fig.savefig(os.path.join(OUTPUT_PATH, 'loss.png'))
-        plt.close(fig)
-    
-    return loss_train
 
 
 if __name__ == '__main__':
@@ -203,7 +186,7 @@ if __name__ == '__main__':
             w_i = rng.uniform(-2.*1e-3, -0.1*1e-3, (N_i,))
     cell.set_weights(np.concatenate((w_s, w_e, w_i)))
 
-    t_rec, v_target, _ = gen_target(cell, inputs)
+    t_rec, v_tgt, _ = gen_target(cell, inputs)
 
     ### Reinitialize weights ###
     w_s = np.array([1.,] * N_s)
@@ -212,7 +195,7 @@ if __name__ == '__main__':
     cell.set_weights(np.concatenate((w_s, w_e, w_i)))
 
     ### Train ###
-    loss_train = train(cell, inputs, v_target)
+    train(cell, inputs, v_tgt)
 
     print('Done')
     h.quit()

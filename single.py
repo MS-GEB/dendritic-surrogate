@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import torch
 from neuron import h
@@ -8,7 +7,7 @@ MODEL_NAME = 'PassiveHPC'
 MODEL_PATH = f'models/{MODEL_NAME}.hoc'
 MORPH_PATH = 'morphs/2013_03_06_cell11_1125_H41_06.asc'
 
-class Single_s:
+class Single:
     def __init__(self, config):
 
         self.rng = np.random.default_rng(seed=config['seed'])
@@ -25,7 +24,7 @@ class Single_s:
         self.w_e_min, self.w_e_max = config['w_e_min'], config['w_e_max']
         self.w_i_min, self.w_i_max = config['w_i_min'], config['w_i_max']
 
-        self.device = config['device']
+        self.device = torch.device(config['device'])
 
         self._create_cell()
         self._connect_cells()
@@ -55,6 +54,16 @@ class Single_s:
         for sec in self.cell.all:
             sec.e_pas = self.v_rest
         self.v_out = h.Vector().record(self.cell.soma[0](0.5)._ref_v)
+        self.nsec_soma, self.nsec_dend, self.nsec_apic = len(self.cell.soma), len(self.cell.dend), len(self.cell.apic)
+        self.nsec = len(list(self.cell.all))
+        self.nseg_soma = np.sum([sec.nseg for sec in self.cell.soma])
+        self.nseg_dend = np.sum([sec.nseg for sec in self.cell.dend])
+        self.nseg_apic = np.sum([sec.nseg for sec in self.cell.apic])
+        self.nseg = np.sum([sec.nseg for sec in self.cell.all])
+        print(f"soma nsec: {self.nsec_soma}, dend nsec: {self.nsec_dend}, apic nsec: {self.nsec_apic}")
+        print(f"total nsec:", self.nsec)
+        print(f"soma nseg: {self.nseg_soma}, dend nseg: {self.nseg_dend}, apic nseg: {self.nseg_apic}")
+        print(f"total nseg:", self.nseg)
     
     def _cal_K(self):
         self.K_len = int(self.K_max_t / h.dt)
@@ -108,7 +117,7 @@ class Single_s:
 
             del tmp_cell
         
-        self.K = torch.tensor(tmp_K, dtype=torch.float32, device=torch.device(self.device))
+        self.K = torch.tensor(tmp_K, dtype=torch.float32, device=self.device)
 
     def _connect_cells(self):
         self.total_dend = len(self.cell.dend)
@@ -224,18 +233,19 @@ class Single_s:
     
     def _reset_records(self):
         self.It = torch.tensor(np.array([]).reshape((self.N_syn, 0)), 
-                               dtype=torch.float32, device=torch.device(self.device))       # (N_syn, min(t, K_max_t))
+                               dtype=torch.float32, device=self.device)       # (N_syn, min(t, K_max_t))
         self.dItdv = torch.tensor(np.array([]).reshape((self.N_syn, 0)), 
-                                  dtype=torch.float32, device=torch.device(self.device))    # (N_syn, min(t, K_max_t))
+                                  dtype=torch.float32, device=self.device)    # (N_syn, min(t, K_max_t))
         self.dVtdw = torch.tensor(np.zeros((self.N_syn, self.N, 1)), 
-                                  dtype=torch.float32, device=torch.device(self.device))    # (N_syn, N, min(t, K_max_t)), [i, j] = dvjdwi
-        self.dVouttdw = np.zeros((self.N_syn, 1))                                           # (N_syn, t)
+                                  dtype=torch.float32, device=self.device)    # (N_syn, N, min(t, K_max_t)), [i, j] = dvjdwi
+        self.dVouttdw = torch.zeros((self.N_syn, 1),
+                                    dtype=torch.float32, device=self.device)  # (N_syn, t)
         self.v_pred = [self.v_rest,]
 
     def update_pred(self, tstep):
         # called after each timestep advance
         it = torch.tensor([syn.pure_i for syn in self.synlist], 
-                          dtype=torch.float32, device=torch.device(self.device))
+                          dtype=torch.float32, device=self.device)
         self.It = torch.hstack((self.It, it[:, torch.newaxis]))[:, -self.K_len:]            # (N_syn, min(t, K_max_t))
         
         K_out_conv = self.K[0, :, -tstep:]
@@ -246,10 +256,10 @@ class Single_s:
         # called after each timestep advance
         it = torch.tensor([syn.pure_i for syn in self.synlist_s + self.synlist_e] +
                           [-syn.pure_i for syn in self.synlist_i],
-                          dtype=torch.float32, device=torch.device(self.device))
+                          dtype=torch.float32, device=self.device)
         self.It = torch.hstack((self.It, it[:, torch.newaxis]))[:, -self.K_len:]                    # (N_syn, min(t, K_max_t))
         ditdv = torch.tensor([syn.didv for syn in self.synlist],
-                             dtype=torch.float32, device=torch.device(self.device))
+                             dtype=torch.float32, device=self.device)
         self.dItdv = torch.hstack((self.dItdv, ditdv[:, torch.newaxis]))[:, -self.K_len:]           # (N_syn, min(t, K_max_t))
         
         K_conv = self.K[:, :, -tstep:]                                                              # (N, N_syn, min(t, K_max_t))
@@ -258,16 +268,15 @@ class Single_s:
         dvtdw += torch.einsum('jkt,ikt->ij', K_conv, dItdw_conv_0tot_1) * h.dt
 
         self.dVtdw = torch.dstack((self.dVtdw, dvtdw[:, :, torch.newaxis]))[:, :, -self.K_len:]     # (N_syn, N, min(t, K_max_t))
-        dvouttdw = dvtdw[:, 0].cpu().numpy()                                                        # (N_syn,)
-        self.dVouttdw = np.hstack((self.dVouttdw, dvouttdw[:, np.newaxis]))                         # (N_syn, t)
+        self.dVouttdw = torch.hstack((self.dVouttdw, dvtdw[:, 0, torch.newaxis]))                   # (N_syn, t)
 
     def get_dw(self, dLtdv, lr_start, lr_end):
         # called after each run
-        assert(lr_end - lr_start == len(dLtdv))
-        dw = -np.sum(dLtdv * self.dVouttdw[:, lr_start:lr_end], axis=1) / (lr_end - lr_start)
+        assert(lr_end - lr_start == dLtdv.shape[-1])
+        dw = -torch.sum(torch.tensor(dLtdv, device=self.device) * self.dVouttdw[:, lr_start:lr_end], axis=1) / (lr_end - lr_start)
         # mask
         dw[:self.N_s] = 0.
-        return dw
+        return dw.cpu().numpy()
 
     def update_weights(self, dw):
         assert dw.shape == (self.N_syn,)
