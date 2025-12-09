@@ -1,7 +1,7 @@
 # Dendritic Surrogate
 Dendritic voltage surrogate for training synaptic weights of biophysically detailed multi-compartment models.
 
-Code associated with the paper "Gan He, Mengdi Zhao, Tiejun Huang and Kai Du, (2025). A Dendritic Voltage Surrogate-Based Synaptic Learning Framework for Biophysically Detailed Neurons and Networks" for reproducing Figure 3 & 4.
+Code associated with the paper "Gan He, Mengdi Zhao, Tiejun Huang and Kai Du, (2025). A Dendritic Voltage Surrogate-Based Synaptic Learning Framework for Biophysically Detailed Neurons and Networks" for reproducing Figures 3 & 4.
 
 ## Requirements
 Python==3.12 (tested version)\
@@ -28,7 +28,7 @@ python3 run_num.py --mode pas
 python3 run_num.py --mode multi
 ```
 #### All-active model 
-- Dendritic calcium plateau & somatic bursting (Figure 3D-E)
+- Dendritic calcium plateau & somatic bursting (Figures 3D-E)
 ```
 python3 run_num_L5PC.py
 ```
@@ -48,7 +48,7 @@ python3 run_syn.py --mode single --adam
 python3 run_syn.py --mode multi
 ```
 #### All-active model with local learning rule
-- Dendritic calcium plateau & somatic bursting (Figure 4D-E)
+- Dendritic calcium plateau & somatic bursting (Figures 4D-E)
 ```
 python3 run_syn_L5PC.py
 ```
