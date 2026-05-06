@@ -1,14 +1,22 @@
 # Compiled MOD files
-mod/*.c
-mod/*.cpp
-mod/*.o
-mod/*.tmp
-mod/*.dll
-*.dll
-x86_64/
+1_single_cell/mod/*.c
+1_single_cell/mod/*.cpp
+1_single_cell/mod/*.o
+1_single_cell/mod/*.tmp
+1_single_cell/mod/*.dll
+1_single_cell/*.dll
+1_single_cell/x86_64
+2_c_elegans_network/components/mechanism/modfile/*.c
+2_c_elegans_network/components/mechanism/modfile/*.cpp
+2_c_elegans_network/components/mechanism/modfile/*.o
+2_c_elegans_network/components/mechanism/modfile/*.tmp
+2_c_elegans_network/components/mechanism/modfile/*.dll
+2_c_elegans_network/*.dll
+2_c_elegans_network/x86_64
 
 # Experiment outputs
-output/
+1_single_cell/output
+2_c_elegans_network/output
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
