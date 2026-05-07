@@ -550,7 +550,7 @@ class Network(object):
         for i, (ki, Iti) in enumerate(zip(self.K0, It_split)):
             start = self.K_block_n_start[i]
             end = start + self.K_block_n[i]
-            dvtdw[start: end, start: end] = torch.einsum('ijt,it->ij', ki, Iti[:, view_idx]) * self.K_mul * h.dt * self.grad_scale
+            dvtdw[start: end, start: end] = torch.einsum('ijt,it->ij', ki, Iti[:, view_idx]) * h.dt * self.grad_scale
 
         if percise:
             if self.ngpu == 1:
@@ -559,7 +559,7 @@ class Network(object):
                 for j, (ai, ki) in enumerate(zip(tmp_dItdw_conv_0tot_1, self.K0)):
                     start = self.K_block_n_start[j]
                     end = start + self.K_block_n[j]
-                    dvtdw[:, start: end] += torch.einsum('ikt,jkt->ij', ai[:, :, view_idx], ki) * self.K_mul * h.dt
+                    dvtdw[:, start: end] += torch.einsum('ikt,jkt->ij', ai[:, :, view_idx], ki) * h.dt
                 del tmp_dItdw_conv_0tot_1
             else:
                 for i in range(self.ngpu):
@@ -569,7 +569,7 @@ class Network(object):
                         for j, (ai, ki) in enumerate(zip(tmp_dItdw_conv_0tot_1, getattr(self, f'K{i}'))):
                             start = self.K_block_n_start[j]
                             end = start + self.K_block_n[j]
-                            self.tmp_dvtdwlist[i][:, start: end] = torch.einsum('ikt,jkt->ij', ai[:, :, view_idx], ki) * self.K_mul * h.dt
+                            self.tmp_dvtdwlist[i][:, start: end] = torch.einsum('ikt,jkt->ij', ai[:, :, view_idx], ki) * h.dt
                         del tmp_dItdw_conv_0tot_1
                 for i in range(self.ngpu):
                     torch.cuda.synchronize(f'cuda:{i}')

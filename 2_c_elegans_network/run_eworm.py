@@ -1,5 +1,4 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 import copy
 import numpy as np
 from neuron import h
