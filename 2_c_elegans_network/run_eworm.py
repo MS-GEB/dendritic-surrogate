@@ -151,7 +151,7 @@ def train(net: Network, output_names, input_is, target):
         output_corrcoef = np.corrcoef(output_vs[:, lr_start: lr_end])
         mean_error = np.abs(target - output_corrcoef)
         mean_error[np.isnan(mean_error)] = 0.
-        mean_error = 0.5 * np.mean(mean_error ** 2)
+        mean_error = np.mean(mean_error ** 2)
         dLtdv = cal_corrcoef_dLtdv(output_vs, target, lr_start, lr_end)
 
         train_error.append(mean_error)
@@ -220,7 +220,7 @@ def train(net: Network, output_names, input_is, target):
         dw *= alpha_w
         dx *= alpha_x
         dx = np.array([np.interp(np.arange(lr_start, lr_end), np.arange(lr_start, lr_end, K_mul), dxi) for dxi in dx])
-        dx += -1e-1 * x[:, lr_start: lr_end]
+        dx += -3e-2 * x[:, lr_start: lr_end]
 
         net.update_weights(dw)
         x[:, lr_start:lr_end] += dx
